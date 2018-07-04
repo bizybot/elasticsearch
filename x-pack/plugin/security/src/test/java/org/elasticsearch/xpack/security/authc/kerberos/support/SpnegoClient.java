@@ -40,6 +40,11 @@ import javax.security.auth.login.Configuration;
 import javax.security.auth.login.LoginContext;
 import javax.security.auth.login.LoginException;
 
+import static org.elasticsearch.xpack.security.authc.kerberos.support.KerberosTicketValidator.SPNEGO_OID;
+import static org.elasticsearch.xpack.security.authc.kerberos.support.KerberosTicketValidator.IS_IBM_JVM;
+import static org.elasticsearch.xpack.security.authc.kerberos.support.KerberosTicketValidator.IBM_KRB5_LOGIN_MODULE;
+import static org.elasticsearch.xpack.security.authc.kerberos.support.KerberosTicketValidator.SUN_KRB5_LOGIN_MODULE;
+
 /**
  * This class is used as a Spnego client during testing and handles SPNEGO
  * interactions using GSS context negotiation.<br>
@@ -53,7 +58,6 @@ class SpnegoClient implements AutoCloseable {
     private static final Logger LOGGER = ESLoggerFactory.getLogger(SpnegoClient.class);
 
     public static final String CRED_CONF_NAME = "PasswordConf";
-    private static final String SUN_KRB5_LOGIN_MODULE = "com.sun.security.auth.module.Krb5LoginModule";
     private final GSSManager gssManager = GSSManager.getInstance();
     private final LoginContext loginContext;
     private final GSSContext gssContext;
@@ -62,6 +66,7 @@ class SpnegoClient implements AutoCloseable {
      * Creates SpengoClient to interact with given service principal<br>
      * Use {@link #close()} to logout {@link LoginContext} and dispose
      * {@link GSSContext} after usage.
+     *
      * @param userPrincipalName User principal name for login as client
      * @param password password for client
      * @param servicePrincipalName Service principal name with whom this client
@@ -79,11 +84,16 @@ class SpnegoClient implements AutoCloseable {
             final GSSName gssServicePrincipalName = gssManager.createName(servicePrincipalName, GSSName.NT_USER_NAME);
             loginContext = AccessController
                     .doPrivileged((PrivilegedExceptionAction<LoginContext>) () -> loginUsingPassword(userPrincipalName, password));
-            final GSSCredential userCreds = KerberosTestCase.doAsWrapper(loginContext.getSubject(),
-                    (PrivilegedExceptionAction<GSSCredential>) () -> gssManager.createCredential(gssUserPrincipalName,
-                            GSSCredential.DEFAULT_LIFETIME, KerberosTicketValidator.SPNEGO_OID, GSSCredential.INITIATE_ONLY));
-            gssContext = gssManager.createContext(gssServicePrincipalName.canonicalize(KerberosTicketValidator.SPNEGO_OID),
-                    KerberosTicketValidator.SPNEGO_OID, userCreds, GSSCredential.DEFAULT_LIFETIME);
+            // Test this if this is still applicable with latest IBM JVM
+            // Ref: http://www-01.ibm.com/support/docview.wss?uid=swg1IZ54545
+            // No bug found in the IBM DB: https://developer.ibm.com/javasdk/support/fixes/
+            // But old Tomcat bug was fixed and the code is still present
+            // https://bz.apache.org/bugzilla/show_bug.cgi?id=56013
+            final int lifetime = (IS_IBM_JVM) ? GSSCredential.INDEFINITE_LIFETIME : GSSCredential.DEFAULT_LIFETIME;
+            final GSSCredential userCreds =
+                    KerberosTestCase.doAsWrapper(loginContext.getSubject(), (PrivilegedExceptionAction<GSSCredential>) () -> gssManager
+                            .createCredential(gssUserPrincipalName, lifetime, SPNEGO_OID, GSSCredential.INITIATE_ONLY));
+            gssContext = gssManager.createContext(gssServicePrincipalName.canonicalize(SPNEGO_OID), SPNEGO_OID, userCreds, lifetime);
             gssContext.requestMutualAuth(true);
         } catch (PrivilegedActionException pve) {
             LOGGER.error("privileged action exception, with root cause", pve.getException());
@@ -94,8 +104,8 @@ class SpnegoClient implements AutoCloseable {
     }
 
     /**
-     * GSSContext initiator side handling, initiates context establishment and returns the
-     * base64 encoded token to be sent to server.
+     * GSSContext initiator side handling, initiates context establishment and
+     * returns the base64 encoded token to be sent to server.
      *
      * @return Base64 encoded token
      * @throws PrivilegedActionException
@@ -195,15 +205,19 @@ class SpnegoClient implements AutoCloseable {
         public AppConfigurationEntry[] getAppConfigurationEntry(final String name) {
             final Map<String, String> options = new HashMap<>();
             options.put("principal", principal);
-            options.put("storeKey", Boolean.TRUE.toString());
-            options.put("useTicketCache", Boolean.FALSE.toString());
-            options.put("useKeyTab", Boolean.FALSE.toString());
-            options.put("renewTGT", Boolean.FALSE.toString());
-            options.put("refreshKrb5Config", Boolean.TRUE.toString());
-            options.put("isInitiator", Boolean.TRUE.toString());
+            if (IS_IBM_JVM) {
+                options.put("credsType", "initiator");
+            } else {
+                options.put("storeKey", Boolean.TRUE.toString());
+                options.put("useTicketCache", Boolean.FALSE.toString());
+                options.put("useKeyTab", Boolean.FALSE.toString());
+                options.put("renewTGT", Boolean.FALSE.toString());
+                options.put("refreshKrb5Config", Boolean.TRUE.toString());
+                options.put("isInitiator", Boolean.TRUE.toString());
+            }
             options.put("debug", Boolean.TRUE.toString());
 
-            return new AppConfigurationEntry[] { new AppConfigurationEntry(SUN_KRB5_LOGIN_MODULE,
+            return new AppConfigurationEntry[] { new AppConfigurationEntry((IS_IBM_JVM) ? IBM_KRB5_LOGIN_MODULE : SUN_KRB5_LOGIN_MODULE,
                     AppConfigurationEntry.LoginModuleControlFlag.REQUIRED, Collections.unmodifiableMap(options)) };
         }
     }

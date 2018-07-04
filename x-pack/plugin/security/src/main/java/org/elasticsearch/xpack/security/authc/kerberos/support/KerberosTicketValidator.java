@@ -11,6 +11,7 @@ import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.logging.ESLoggerFactory;
+import org.elasticsearch.monitor.jvm.JvmInfo;
 import org.ietf.jgss.GSSContext;
 import org.ietf.jgss.GSSCredential;
 import org.ietf.jgss.GSSException;
@@ -41,8 +42,10 @@ import javax.security.auth.login.LoginException;
  * It may respond with token which needs to be communicated with the peer.
  */
 public class KerberosTicketValidator {
+    static final boolean IS_IBM_JVM = JvmInfo.jvmInfo().getVmVendor().contains("IBM");
+    static final String SUN_KRB5_LOGIN_MODULE = "com.sun.security.auth.module.Krb5LoginModule";
+    static final String IBM_KRB5_LOGIN_MODULE = "com.ibm.security.auth.module.Krb5LoginModule";
     static final Oid SPNEGO_OID = getSpnegoOid();
-
     private static Oid getSpnegoOid() {
         Oid oid = null;
         try {
@@ -56,7 +59,6 @@ public class KerberosTicketValidator {
     private static final Logger LOGGER = ESLoggerFactory.getLogger(KerberosTicketValidator.class);
 
     private static final String KEY_TAB_CONF_NAME = "KeytabConf";
-    private static final String SUN_KRB5_LOGIN_MODULE = "com.sun.security.auth.module.Krb5LoginModule";
 
     /**
      * Validates client kerberos ticket received from the peer.
@@ -151,8 +153,14 @@ public class KerberosTicketValidator {
      * @throws PrivilegedActionException
      */
     private static GSSCredential createCredentials(final GSSManager gssManager, final Subject subject) throws PrivilegedActionException {
+        // Test this if this is still applicable with latest IBM JVM
+        // Ref: http://www-01.ibm.com/support/docview.wss?uid=swg1IZ54545
+        // No bug found in the IBM DB: https://developer.ibm.com/javasdk/support/fixes/
+        // But old Tomcat bug was fixed and the code is still present
+        // https://bz.apache.org/bugzilla/show_bug.cgi?id=56013
+        final int lifetime = (IS_IBM_JVM) ? GSSCredential.INDEFINITE_LIFETIME : GSSCredential.DEFAULT_LIFETIME;
         return doAsWrapper(subject, (PrivilegedExceptionAction<GSSCredential>) () -> gssManager.createCredential(null,
-                GSSCredential.DEFAULT_LIFETIME, SPNEGO_OID, GSSCredential.ACCEPT_ONLY));
+                lifetime, SPNEGO_OID, GSSCredential.ACCEPT_ONLY));
     }
 
     /**
@@ -253,21 +261,25 @@ public class KerberosTicketValidator {
         @Override
         public AppConfigurationEntry[] getAppConfigurationEntry(final String name) {
             final Map<String, String> options = new HashMap<>();
-            options.put("keyTab", keytabFilePath);
+            if (IS_IBM_JVM) {
+                options.put("useKeytab", keytabFilePath);
+                options.put("credsType", "acceptor");
+            } else {
+                options.put("keyTab", keytabFilePath);
+                options.put("useKeyTab", Boolean.TRUE.toString());
+                options.put("storeKey", Boolean.TRUE.toString());
+                options.put("doNotPrompt", Boolean.TRUE.toString());
+                options.put("renewTGT", Boolean.FALSE.toString());
+                options.put("refreshKrb5Config", Boolean.TRUE.toString());
+                options.put("isInitiator", Boolean.FALSE.toString());
+            }
             /*
              * As acceptor, we can have multiple SPNs, we do not want to use particular
              * principal so it uses "*"
              */
             options.put("principal", "*");
-            options.put("useKeyTab", Boolean.TRUE.toString());
-            options.put("storeKey", Boolean.TRUE.toString());
-            options.put("doNotPrompt", Boolean.TRUE.toString());
-            options.put("renewTGT", Boolean.FALSE.toString());
-            options.put("refreshKrb5Config", Boolean.TRUE.toString());
-            options.put("isInitiator", Boolean.FALSE.toString());
             options.put("debug", Boolean.toString(krbDebug));
-
-            return new AppConfigurationEntry[] { new AppConfigurationEntry(SUN_KRB5_LOGIN_MODULE,
+            return new AppConfigurationEntry[] { new AppConfigurationEntry((IS_IBM_JVM) ? IBM_KRB5_LOGIN_MODULE : SUN_KRB5_LOGIN_MODULE,
                     AppConfigurationEntry.LoginModuleControlFlag.REQUIRED, Collections.unmodifiableMap(options)) };
         }
 

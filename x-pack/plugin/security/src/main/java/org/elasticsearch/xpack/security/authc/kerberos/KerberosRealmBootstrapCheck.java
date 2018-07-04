@@ -57,6 +57,9 @@ public class KerberosRealmBootstrapCheck implements BootstrapCheck {
                 if (Files.exists(keytabPath) == false) {
                     return BootstrapCheckResult.failure("configured service key tab file [" + keytabPath + "] does not exist");
                 }
+                if (Files.isReadable(keytabPath) == false) {
+                    return BootstrapCheckResult.failure("configured service key tab file [" + keytabPath + "] is not readable");
+                }
             }
         }
         return BootstrapCheckResult.success();
