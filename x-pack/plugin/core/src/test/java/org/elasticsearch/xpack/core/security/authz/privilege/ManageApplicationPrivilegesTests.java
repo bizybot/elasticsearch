@@ -20,7 +20,6 @@ import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.EqualsHashCodeTestUtils;
-import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.core.XPackClientPlugin;
 import org.elasticsearch.xpack.core.security.action.privilege.DeletePrivilegesAction;
 import org.elasticsearch.xpack.core.security.action.privilege.DeletePrivilegesRequest;
@@ -32,7 +31,8 @@ import org.elasticsearch.xpack.core.security.action.role.PutRoleAction;
 import org.elasticsearch.xpack.core.security.action.rolemapping.DeleteRoleMappingAction;
 import org.elasticsearch.xpack.core.security.action.user.GetUsersAction;
 import org.elasticsearch.xpack.core.security.action.user.HasPrivilegesAction;
-import org.elasticsearch.xpack.core.security.authz.privilege.ConditionalClusterPrivileges.ManageApplicationPrivileges;
+import org.elasticsearch.xpack.core.security.authz.permission.ClusterPermission;
+import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivileges.ManageApplicationPrivileges;
 
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
@@ -48,7 +48,6 @@ import static org.elasticsearch.common.xcontent.DeprecationHandler.THROW_UNSUPPO
 import static org.elasticsearch.test.TestMatchers.predicateMatches;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 
@@ -100,34 +99,36 @@ public class ManageApplicationPrivilegesTests extends ESTestCase {
         EqualsHashCodeTestUtils.checkEqualsAndHashCode(privileges, this::clone, mutate);
     }
 
-    public void testPrivilege() {
-        final ManageApplicationPrivileges privileges = buildPrivileges();
-        assertThat(privileges.getPrivilege(), instanceOf(ClusterPrivilege.class));
+    public void testActionPattern() {
+        // TODO -- FIXME, does this test still make sense?
+        Predicate<String> predicate = ManageApplicationPrivileges.ACTION_PREDICATE;
         for (String actionName : Arrays.asList(GetPrivilegesAction.NAME, PutPrivilegesAction.NAME, DeletePrivilegesAction.NAME)) {
-            assertThat(privileges.getPrivilege().predicate(), predicateMatches(actionName));
+            assertThat(predicate, predicateMatches(actionName));
         }
         for (String actionName : Arrays.asList(GetUsersAction.NAME, PutRoleAction.NAME, DeleteRoleMappingAction.NAME,
             HasPrivilegesAction.NAME)) {
-            assertThat(privileges.getPrivilege().predicate(), not(predicateMatches(actionName)));
+            assertThat(predicate, not(predicateMatches(actionName)));
         }
     }
 
-    public void testRequestPredicate() {
+    public void testPermission() {
+        // TODO -- FIXME, does this test still make sense?
         final ManageApplicationPrivileges kibanaAndLogstash = new ManageApplicationPrivileges(Sets.newHashSet("kibana-*", "logstash"));
         final ManageApplicationPrivileges cloudAndSwiftype = new ManageApplicationPrivileges(Sets.newHashSet("cloud-*", "swiftype"));
-        final Predicate<TransportRequest> kibanaAndLogstashPredicate = kibanaAndLogstash.getRequestPredicate();
-        final Predicate<TransportRequest> cloudAndSwiftypePredicate = cloudAndSwiftype.getRequestPredicate();
-        assertThat(kibanaAndLogstashPredicate, notNullValue());
-        assertThat(cloudAndSwiftypePredicate, notNullValue());
+
+        final ClusterPermission kibanaAndLogstashPermission = getPermission(kibanaAndLogstash);
+        final ClusterPermission cloudAndSwiftypePermission = getPermission(cloudAndSwiftype);
+        assertThat(kibanaAndLogstashPermission, notNullValue());
+        assertThat(cloudAndSwiftypePermission, notNullValue());
 
         final GetPrivilegesRequest getKibana1 = new GetPrivilegesRequest();
         getKibana1.application("kibana-1");
-        assertThat(kibanaAndLogstashPredicate, predicateMatches(getKibana1));
-        assertThat(cloudAndSwiftypePredicate, not(predicateMatches(getKibana1)));
+        assertThat(kibanaAndLogstashPermission.check(GetPrivilegesAction.NAME, getKibana1), equalTo(true));
+        assertThat(cloudAndSwiftypePermission.check(GetPrivilegesAction.NAME, getKibana1), equalTo(false));
 
         final DeletePrivilegesRequest deleteLogstash = new DeletePrivilegesRequest("logstash", new String[]{"all"});
-        assertThat(kibanaAndLogstashPredicate, predicateMatches(deleteLogstash));
-        assertThat(cloudAndSwiftypePredicate, not(predicateMatches(deleteLogstash)));
+        assertThat(kibanaAndLogstashPermission.check(DeletePrivilegesAction.NAME, deleteLogstash), equalTo(true));
+        assertThat(cloudAndSwiftypePermission.check(DeletePrivilegesAction.NAME, deleteLogstash), equalTo(false));
 
         final PutPrivilegesRequest putKibana = new PutPrivilegesRequest();
 
@@ -137,8 +138,12 @@ public class ManageApplicationPrivilegesTests extends ESTestCase {
                 randomAlphaOfLengthBetween(3, 6).toLowerCase(Locale.ROOT), Collections.emptySet(), Collections.emptyMap()));
         }
         putKibana.setPrivileges(kibanaPrivileges);
-        assertThat(kibanaAndLogstashPredicate, predicateMatches(putKibana));
-        assertThat(cloudAndSwiftypePredicate, not(predicateMatches(putKibana)));
+        assertThat(kibanaAndLogstashPermission.check(PutPrivilegesAction.NAME, putKibana), equalTo(true));
+        assertThat(cloudAndSwiftypePermission.check(PutPrivilegesAction.NAME, putKibana), equalTo(false));
+    }
+
+    private ClusterPermission getPermission(ClusterPrivilege privilege) {
+        return privilege.buildPermission(ClusterPermission.builder()).build();
     }
 
     public void testSecurityForGetAllApplicationPrivileges() {
@@ -151,8 +156,8 @@ public class ManageApplicationPrivilegesTests extends ESTestCase {
         final ManageApplicationPrivileges kibanaOnly = new ManageApplicationPrivileges(Sets.newHashSet("kibana-*"));
         final ManageApplicationPrivileges allApps = new ManageApplicationPrivileges(Sets.newHashSet("*"));
 
-        assertThat(kibanaOnly.getRequestPredicate(), not(predicateMatches(getAll)));
-        assertThat(allApps.getRequestPredicate(), predicateMatches(getAll));
+        assertThat(getPermission(kibanaOnly).check(GetPrivilegesAction.NAME, getAll), equalTo(false));
+        assertThat(getPermission(allApps).check(GetPrivilegesAction.NAME, getAll), equalTo(true));
     }
 
     private ManageApplicationPrivileges clone(ManageApplicationPrivileges original) {

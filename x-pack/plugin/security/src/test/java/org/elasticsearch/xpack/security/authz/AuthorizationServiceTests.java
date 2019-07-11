@@ -108,12 +108,12 @@ import org.elasticsearch.xpack.core.security.authz.ResolvedIndices;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor.IndicesPrivileges;
 import org.elasticsearch.xpack.core.security.authz.accesscontrol.IndicesAccessControl;
+import org.elasticsearch.xpack.core.security.authz.permission.ClusterPermission;
 import org.elasticsearch.xpack.core.security.authz.permission.FieldPermissionsCache;
 import org.elasticsearch.xpack.core.security.authz.permission.Role;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilegeDescriptor;
-import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilege;
-import org.elasticsearch.xpack.core.security.authz.privilege.ConditionalClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore;
 import org.elasticsearch.xpack.core.security.user.AnonymousUser;
 import org.elasticsearch.xpack.core.security.user.ElasticUser;
@@ -147,7 +147,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
-import java.util.function.Predicate;
 
 import static java.util.Arrays.asList;
 import static org.elasticsearch.test.SecurityTestsUtils.assertAuthenticationException;
@@ -313,15 +312,19 @@ public class AuthorizationServiceTests extends ESTestCase {
         final DeletePrivilegesRequest request = new DeletePrivilegesRequest();
         final Authentication authentication = createAuthentication(new User("user1", "role1"));
 
-        final ConditionalClusterPrivilege conditionalClusterPrivilege = Mockito.mock(ConditionalClusterPrivilege.class);
-        final Predicate<TransportRequest> requestPredicate = r -> r == request;
-        Mockito.when(conditionalClusterPrivilege.getRequestPredicate()).thenReturn(requestPredicate);
-        Mockito.when(conditionalClusterPrivilege.getPrivilege()).thenReturn(ClusterPrivilege.MANAGE_SECURITY);
-        final ConditionalClusterPrivilege[] conditionalClusterPrivileges = new ConditionalClusterPrivilege[] {
-            conditionalClusterPrivilege
+        final ConfigurableClusterPrivilege configurableClusterPrivilege = Mockito.mock(ConfigurableClusterPrivilege.class);
+        when(configurableClusterPrivilege.buildPermission(Mockito.any())).thenAnswer(inv -> {
+            assertThat(inv.getArguments(), org.hamcrest.Matchers.arrayWithSize(1));
+            assertThat(inv.getArguments()[0], org.hamcrest.Matchers.instanceOf(ClusterPermission.Builder.class));
+            ClusterPermission.Builder builder = (ClusterPermission.Builder) inv.getArguments()[0];
+            builder.add(configurableClusterPrivilege, action -> action.contains("xpack/security"), req -> req == request);
+            return builder;
+        });
+        final ConfigurableClusterPrivilege[] configurableClusterPrivileges = new ConfigurableClusterPrivilege[] {
+            configurableClusterPrivilege
         };
         final String requestId = AuditUtil.getOrGenerateRequestId(threadContext);
-        RoleDescriptor role = new RoleDescriptor("role1", null, null, null, conditionalClusterPrivileges, null, null ,null);
+        RoleDescriptor role = new RoleDescriptor("role1", null, null, null, configurableClusterPrivileges, null, null ,null);
         roleMap.put("role1", role);
 
         authorize(authentication, DeletePrivilegesAction.NAME, request);
@@ -334,15 +337,19 @@ public class AuthorizationServiceTests extends ESTestCase {
         final DeletePrivilegesRequest request = new DeletePrivilegesRequest();
         final Authentication authentication = createAuthentication(new User("user1", "role1"));
 
-        final ConditionalClusterPrivilege conditionalClusterPrivilege = Mockito.mock(ConditionalClusterPrivilege.class);
-        final Predicate<TransportRequest> requestPredicate = r -> false;
-        Mockito.when(conditionalClusterPrivilege.getRequestPredicate()).thenReturn(requestPredicate);
-        Mockito.when(conditionalClusterPrivilege.getPrivilege()).thenReturn(ClusterPrivilege.MANAGE_SECURITY);
-        final ConditionalClusterPrivilege[] conditionalClusterPrivileges = new ConditionalClusterPrivilege[] {
-            conditionalClusterPrivilege
+        final ConfigurableClusterPrivilege configurableClusterPrivilege = Mockito.mock(ConfigurableClusterPrivilege.class);
+        when(configurableClusterPrivilege.buildPermission(Mockito.any())).thenAnswer(inv -> {
+            assertThat(inv.getArguments(), org.hamcrest.Matchers.arrayWithSize(1));
+            assertThat(inv.getArguments()[0], org.hamcrest.Matchers.instanceOf(ClusterPermission.Builder.class));
+            ClusterPermission.Builder builder = (ClusterPermission.Builder) inv.getArguments()[0];
+            builder.add(configurableClusterPrivilege, action -> true, req -> false);
+            return builder;
+        });
+        final ConfigurableClusterPrivilege[] configurableClusterPrivileges = new ConfigurableClusterPrivilege[] {
+            configurableClusterPrivilege
         };
         final String requestId = AuditUtil.getOrGenerateRequestId(threadContext);
-        RoleDescriptor role = new RoleDescriptor("role1", null, null, null, conditionalClusterPrivileges, null, null ,null);
+        RoleDescriptor role = new RoleDescriptor("role1", null, null, null, configurableClusterPrivileges, null, null ,null);
         roleMap.put("role1", role);
 
         assertThrowsAuthorizationException(

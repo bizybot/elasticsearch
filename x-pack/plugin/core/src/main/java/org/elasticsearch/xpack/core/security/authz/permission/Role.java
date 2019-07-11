@@ -17,7 +17,9 @@ import org.elasticsearch.xpack.core.security.authz.accesscontrol.IndicesAccessCo
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilegeDescriptor;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilege;
-import org.elasticsearch.xpack.core.security.authz.privilege.ConditionalClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
+import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.FixedClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.Privilege;
 
@@ -184,7 +186,7 @@ public class Role {
     public static class Builder {
 
         private final String[] names;
-        private ClusterPermission cluster = ClusterPermission.SimpleClusterPermission.NONE;
+        private ClusterPermission cluster = ClusterPermission.NONE;
         private RunAsPermission runAs = RunAsPermission.NONE;
         private List<IndicesPermission.Group> groups = new ArrayList<>();
         private List<Tuple<ApplicationPrivilege, Set<String>>> applicationPrivs = new ArrayList<>();
@@ -195,7 +197,7 @@ public class Role {
 
         private Builder(RoleDescriptor rd, @Nullable FieldPermissionsCache fieldPermissionsCache) {
             this.names = new String[] { rd.getName() };
-            cluster(Sets.newHashSet(rd.getClusterPrivileges()), Arrays.asList(rd.getConditionalClusterPrivileges()));
+            cluster(Sets.newHashSet(rd.getClusterPrivileges()), Arrays.asList(rd.getConfigurableClusterPrivileges()));
             groups.addAll(convertFromIndicesPrivileges(rd.getIndicesPrivileges(), fieldPermissionsCache));
 
             final RoleDescriptor.ApplicationResourcePrivileges[] applicationPrivileges = rd.getApplicationPrivileges();
@@ -209,21 +211,16 @@ public class Role {
             }
         }
 
-        public Builder cluster(Set<String> privilegeNames, Iterable<ConditionalClusterPrivilege> conditionalClusterPrivileges) {
-            List<ClusterPermission> clusterPermissions = new ArrayList<>();
-            if (privilegeNames.isEmpty() == false) {
-                clusterPermissions.add(new ClusterPermission.SimpleClusterPermission(ClusterPrivilege.get(privilegeNames)));
+        public Builder cluster(Set<String> privilegeNames, Iterable<ConfigurableClusterPrivilege> configurablePrivileges) {
+            ClusterPermission.Builder clusterPermissionBuilder = ClusterPermission.builder();
+            for (String privilegeName : privilegeNames) {
+                FixedClusterPrivilege privilege = ClusterPrivilegeResolver.resolve(privilegeName);
+                clusterPermissionBuilder = privilege.buildPermission(clusterPermissionBuilder);
             }
-            for (ConditionalClusterPrivilege ccp : conditionalClusterPrivileges) {
-                clusterPermissions.add(new ClusterPermission.ConditionalClusterPermission(ccp));
+            for (ConfigurableClusterPrivilege ccp : configurablePrivileges) {
+                clusterPermissionBuilder = ccp.buildPermission(clusterPermissionBuilder);
             }
-            if (clusterPermissions.isEmpty()) {
-                this.cluster = ClusterPermission.SimpleClusterPermission.NONE;
-            } else if (clusterPermissions.size() == 1) {
-                this.cluster = clusterPermissions.get(0);
-            } else {
-                this.cluster = new ClusterPermission.CompositeClusterPermission(clusterPermissions);
-            }
+            this.cluster = clusterPermissionBuilder.build();
             return this;
         }
 
@@ -232,7 +229,7 @@ public class Role {
          */
         @Deprecated
         public Builder cluster(ClusterPrivilege privilege) {
-            cluster = new ClusterPermission.SimpleClusterPermission(privilege);
+            cluster = privilege.buildPermission(ClusterPermission.builder()).build();
             return this;
         }
 

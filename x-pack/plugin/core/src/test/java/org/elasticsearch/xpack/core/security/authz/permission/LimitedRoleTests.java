@@ -21,7 +21,7 @@ import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.core.security.authz.accesscontrol.IndicesAccessControl;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilegeDescriptor;
-import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.junit.Before;
 
@@ -200,27 +200,27 @@ public class LimitedRoleTests extends ESTestCase {
     public void testCheckClusterPrivilege() {
         Role fromRole = Role.builder("a-role").cluster(Collections.singleton("manage_security"), Collections.emptyList())
                 .build();
-        assertThat(fromRole.grants(ClusterPrivilege.ALL), is(false));
-        assertThat(fromRole.grants(ClusterPrivilege.MANAGE_SECURITY), is(true));
+        assertThat(fromRole.grants(ClusterPrivilegeResolver.resolve("all")), is(false));
+        assertThat(fromRole.grants(ClusterPrivilegeResolver.resolve("manage_security")), is(true));
 
         {
             Role limitedByRole = Role.builder("scoped-role")
                     .cluster(Collections.singleton("all"), Collections.emptyList()).build();
-            assertThat(limitedByRole.grants(ClusterPrivilege.ALL), is(true));
-            assertThat(limitedByRole.grants(ClusterPrivilege.MANAGE_SECURITY), is(true));
+            assertThat(limitedByRole.grants(ClusterPrivilegeResolver.resolve("all")), is(true));
+            assertThat(limitedByRole.grants(ClusterPrivilegeResolver.resolve("manage_security")), is(true));
             Role role = LimitedRole.createLimitedRole(fromRole, limitedByRole);
-            assertThat(role.grants(ClusterPrivilege.ALL), is(false));
-            assertThat(role.grants(ClusterPrivilege.MANAGE_SECURITY), is(true));
+            assertThat(role.grants(ClusterPrivilegeResolver.resolve("all")), is(false));
+            assertThat(role.grants(ClusterPrivilegeResolver.resolve("manage_security")), is(true));
         }
         {
             Role limitedByRole = Role.builder("scoped-role")
                     .cluster(Collections.singleton("monitor"), Collections.emptyList()).build();
-            assertThat(limitedByRole.grants(ClusterPrivilege.ALL), is(false));
-            assertThat(limitedByRole.grants(ClusterPrivilege.MONITOR), is(true));
+            assertThat(limitedByRole.grants(ClusterPrivilegeResolver.resolve("all")), is(false));
+            assertThat(limitedByRole.grants(ClusterPrivilegeResolver.resolve("monitor")), is(true));
             Role role = LimitedRole.createLimitedRole(fromRole, limitedByRole);
-            assertThat(role.grants(ClusterPrivilege.ALL), is(false));
-            assertThat(role.grants(ClusterPrivilege.MANAGE_SECURITY), is(false));
-            assertThat(role.grants(ClusterPrivilege.MONITOR), is(false));
+            assertThat(role.grants(ClusterPrivilegeResolver.resolve("all")), is(false));
+            assertThat(role.grants(ClusterPrivilegeResolver.resolve("manage_security")), is(false));
+            assertThat(role.grants(ClusterPrivilegeResolver.resolve("monitor")), is(false));
         }
     }
 
@@ -273,7 +273,6 @@ public class LimitedRoleTests extends ESTestCase {
             resourcePrivileges = fromRole.checkIndicesPrivileges(Sets.newHashSet("ind-1", ".security"), true,
                     Collections.singleton("read"));
             // Map<String, ResourcePrivileges> expectedResourceToResourcePrivs = new HashMap<>();
-            ;
             expectedAppPrivsByResource = new ResourcePrivilegesMap(true,
                     mapBuilder().put("ind-1", ResourcePrivileges.builder("ind-1").addPrivilege("read", true).build())
                             .put(".security", ResourcePrivileges.builder(".security").addPrivilege("read", true).build()).map());

@@ -28,7 +28,6 @@ import org.elasticsearch.action.termvectors.MultiTermVectorsAction;
 import org.elasticsearch.cluster.metadata.AliasOrIndex;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesReference;
-import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.transport.TransportActionProxy;
@@ -57,7 +56,9 @@ import org.elasticsearch.xpack.core.security.authz.permission.Role;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilegeDescriptor;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilege;
-import org.elasticsearch.xpack.core.security.authz.privilege.ConditionalClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
+import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.FixedClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.Privilege;
 import org.elasticsearch.xpack.core.security.support.Automatons;
 import org.elasticsearch.xpack.core.security.user.User;
@@ -360,7 +361,7 @@ public class RBACEngine implements AuthorizationEngine {
 
         Map<String, Boolean> cluster = new HashMap<>();
         for (String checkAction : request.clusterPrivileges()) {
-            final ClusterPrivilege checkPrivilege = ClusterPrivilege.get(Collections.singleton(checkAction));
+            final ClusterPrivilege checkPrivilege = ClusterPrivilegeResolver.resolve(checkAction);
             cluster.put(checkAction, userRole.grants(checkPrivilege));
         }
         boolean allMatch = cluster.values().stream().allMatch(Boolean::booleanValue);
@@ -413,14 +414,14 @@ public class RBACEngine implements AuthorizationEngine {
         // We use sorted sets for Strings because they will typically be small, and having a predictable order allows for simpler testing
         final Set<String> cluster = new TreeSet<>();
         // But we don't have a meaningful ordering for objects like ConditionalClusterPrivilege, so the tests work with "random" ordering
-        final Set<ConditionalClusterPrivilege> conditionalCluster = new HashSet<>();
-        for (Tuple<ClusterPrivilege, ConditionalClusterPrivilege> tup : userRole.cluster().privileges()) {
-            if (tup.v2() == null) {
-                if (ClusterPrivilege.NONE.equals(tup.v1()) == false) {
-                    cluster.addAll(tup.v1().name());
+        final Set<ConfigurableClusterPrivilege> configurableCluster = new HashSet<>();
+        for (ClusterPrivilege privilege : userRole.cluster().privileges()) {
+            if (privilege instanceof FixedClusterPrivilege) {
+                if (ClusterPrivilegeResolver.NONE.equals(privilege) == false) {
+                    cluster.add(((FixedClusterPrivilege) privilege).name());
                 }
-            } else {
-                conditionalCluster.add(tup.v2());
+            } else if (privilege instanceof ConfigurableClusterPrivilege) {
+                configurableCluster.add((ConfigurableClusterPrivilege) privilege);
             }
         }
 
@@ -462,7 +463,7 @@ public class RBACEngine implements AuthorizationEngine {
             runAs = runAsPrivilege.name();
         }
 
-        return new GetUserPrivilegesResponse(cluster, conditionalCluster, indices, application, runAs);
+        return new GetUserPrivilegesResponse(cluster, configurableCluster, indices, application, runAs);
     }
 
     static List<String> resolveAuthorizedIndicesFromRole(Role role, String action, Map<String, AliasOrIndex> aliasAndIndexLookup) {
