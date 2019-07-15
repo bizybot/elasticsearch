@@ -12,6 +12,7 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.transport.TransportRequest;
+import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
 import org.elasticsearch.xpack.core.security.authz.accesscontrol.IndicesAccessControl;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilege;
@@ -19,7 +20,7 @@ import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivileg
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
 import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege;
-import org.elasticsearch.xpack.core.security.authz.privilege.FixedClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.NameableClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.Privilege;
 
@@ -126,10 +127,11 @@ public class Role {
      *
      * @param action cluster action
      * @param request {@link TransportRequest}
+     * @param authentication {@link Authentication} current authenticated user
      * @return {@code true} if action is allowed else returns {@code false}
      */
-    public boolean checkClusterAction(String action, TransportRequest request) {
-        return cluster.check(action, request);
+    public boolean checkClusterAction(String action, TransportRequest request, Authentication authentication) {
+        return cluster.check(action, request, authentication);
     }
 
     /**
@@ -214,7 +216,7 @@ public class Role {
         public Builder cluster(Set<String> privilegeNames, Iterable<ConfigurableClusterPrivilege> configurablePrivileges) {
             ClusterPermission.Builder clusterPermissionBuilder = ClusterPermission.builder();
             for (String privilegeName : privilegeNames) {
-                FixedClusterPrivilege privilege = ClusterPrivilegeResolver.resolve(privilegeName);
+                NameableClusterPrivilege privilege = ClusterPrivilegeResolver.resolve(privilegeName);
                 clusterPermissionBuilder = privilege.buildPermission(clusterPermissionBuilder);
             }
             for (ConfigurableClusterPrivilege ccp : configurablePrivileges) {

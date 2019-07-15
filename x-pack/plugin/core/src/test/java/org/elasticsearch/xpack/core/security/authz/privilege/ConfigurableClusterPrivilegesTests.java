@@ -30,12 +30,12 @@ import static org.hamcrest.Matchers.equalTo;
 public class ConfigurableClusterPrivilegesTests extends ESTestCase {
 
     public void testSerialization() throws Exception {
-        final ConfigurableClusterPrivilege[] original = buildSecurityPrivileges();
+        final GlobalConfigurableClusterPrivilege[] original = buildSecurityPrivileges();
         try (BytesStreamOutput out = new BytesStreamOutput()) {
-            ConfigurableClusterPrivileges.writeArray(out, original);
+            GlobalConfigurableClusterPrivileges.writeArray(out, original);
             final NamedWriteableRegistry registry = new NamedWriteableRegistry(new XPackClientPlugin(Settings.EMPTY).getNamedWriteables());
             try (StreamInput in = new NamedWriteableAwareStreamInput(out.bytes().streamInput(), registry)) {
-                final ConfigurableClusterPrivilege[] copy = ConfigurableClusterPrivileges.readArray(in);
+                final ConfigurableClusterPrivilege[] copy = GlobalConfigurableClusterPrivileges.readArray(in);
                 assertThat(copy, equalTo(original));
                 assertThat(original, equalTo(copy));
             }
@@ -47,26 +47,26 @@ public class ConfigurableClusterPrivilegesTests extends ESTestCase {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             final XContentBuilder builder = new XContentBuilder(xContent, out);
 
-            final List<ConfigurableClusterPrivilege> original = Arrays.asList(buildSecurityPrivileges());
-            ConfigurableClusterPrivileges.toXContent(builder, ToXContent.EMPTY_PARAMS, original);
+            final List<GlobalConfigurableClusterPrivilege> original = Arrays.asList(buildSecurityPrivileges());
+            GlobalConfigurableClusterPrivileges.toXContent(builder, ToXContent.EMPTY_PARAMS, original);
             builder.flush();
 
             final byte[] bytes = out.toByteArray();
             try (XContentParser parser = xContent.createParser(NamedXContentRegistry.EMPTY, THROW_UNSUPPORTED_OPERATION, bytes)) {
                 assertThat(parser.nextToken(), equalTo(XContentParser.Token.START_OBJECT));
-                final List<ConfigurableClusterPrivilege> clone = ConfigurableClusterPrivileges.parse(parser);
+                final List<GlobalConfigurableClusterPrivilege> clone = GlobalConfigurableClusterPrivileges.parse(parser);
                 assertThat(clone, equalTo(original));
                 assertThat(original, equalTo(clone));
             }
         }
     }
 
-    private ConfigurableClusterPrivilege[] buildSecurityPrivileges() {
+    private GlobalConfigurableClusterPrivilege[] buildSecurityPrivileges() {
         return buildSecurityPrivileges(randomIntBetween(4, 7));
     }
 
-    private ConfigurableClusterPrivilege[] buildSecurityPrivileges(int applicationNameLength) {
-        return new ConfigurableClusterPrivilege[] {
+    private GlobalConfigurableClusterPrivilege[] buildSecurityPrivileges(int applicationNameLength) {
+        return new GlobalConfigurableClusterPrivilege[] {
             ManageApplicationPrivilegesTests.buildPrivileges(applicationNameLength)
         };
     }

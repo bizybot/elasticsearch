@@ -6,45 +6,28 @@
 
 package org.elasticsearch.xpack.core.security.authz.privilege;
 
-import org.elasticsearch.common.ParseField;
-import org.elasticsearch.common.io.stream.NamedWriteable;
-import org.elasticsearch.common.xcontent.ToXContentFragment;
-import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.transport.TransportRequest;
+import org.elasticsearch.xpack.core.security.authc.Authentication;
+import org.elasticsearch.xpack.core.security.authz.permission.ClusterPermission;
+import org.elasticsearch.xpack.core.security.support.Automatons;
 
-import java.io.IOException;
-import java.util.Collection;
+import java.util.function.BiPredicate;
 
 /**
- * A ConfigurableClusterPrivilege is a form of {@link ClusterPrivilege} that can be configured by an Elasticsearch security administrator
- * within a {@link org.elasticsearch.xpack.core.security.authz.RoleDescriptor}.
+ * A {@link ConfigurableClusterPrivilege} is an interface that helps adding a condition to a {@link AutomatonClusterPrivilege}, that
+ * defines a {@link BiPredicate} for a {@link TransportRequest} (that determines which requests may be executed) and a
+ * {@link Authentication} (for current authenticated user).
+ * The predicate can be used to determine if the request is permitted in the context of given authentication.
  */
-public interface ConfigurableClusterPrivilege extends ClusterPrivilege, NamedWriteable, ToXContentFragment {
+public interface ConfigurableClusterPrivilege extends AutomatonClusterPrivilege {
 
     /**
-     * The category under which this privilege should be rendered when output as XContent.
+     * The request-level privilege (as a {@link BiPredicate}) that is required by this configurable privilege that acts in the
+     * context of given authentication.
      */
-    Category getCategory();
+    BiPredicate<TransportRequest, Authentication> getRequestPredicate();
 
-    /**
-     * A {@link ConfigurableClusterPrivilege} should generate a fragment of {@code XContent}, which consists of
-     * a single field name, followed by its value (which may be an object, an array, or a simple value).
-     */
-    @Override
-    XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException;
-
-    /**
-     * Categories exist for to segment privileges for the purposes of rendering to XContent.
-     * {@link ConfigurableClusterPrivileges#toXContent(XContentBuilder, Params, Collection)} builds one XContent
-     * object for a collection of {@link ConfigurableClusterPrivilege} instances, with the top level fields built
-     * from the categories.
-     */
-    enum Category {
-        APPLICATION(new ParseField("application"));
-
-        public final ParseField field;
-
-        Category(ParseField field) {
-            this.field = field;
-        }
+    default ClusterPermission.Builder buildPermission(ClusterPermission.Builder builder) {
+        return builder.add(this, Automatons.predicate(automaton()), getRequestPredicate());
     }
 }

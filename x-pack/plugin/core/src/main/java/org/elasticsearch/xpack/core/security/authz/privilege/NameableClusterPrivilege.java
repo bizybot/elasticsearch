@@ -9,7 +9,7 @@ package org.elasticsearch.xpack.core.security.authz.privilege;
 /**
  * A {@link ClusterPrivilege} that is statically defined. It has a single name, and cannot be configured.
  */
-public interface FixedClusterPrivilege extends ClusterPrivilege {
+public interface NameableClusterPrivilege extends AutomatonClusterPrivilege {
 
     String name();
 

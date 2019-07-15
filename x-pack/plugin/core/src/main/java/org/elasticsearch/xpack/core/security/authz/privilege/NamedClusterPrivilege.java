@@ -6,7 +6,6 @@
 package org.elasticsearch.xpack.core.security.authz.privilege;
 
 import org.apache.lucene.util.automaton.Automaton;
-import org.elasticsearch.xpack.core.security.authz.permission.ClusterPermission;
 import org.elasticsearch.xpack.core.security.support.Automatons;
 
 import java.util.Set;
@@ -14,7 +13,7 @@ import java.util.Set;
 /**
  * A {@link ClusterPrivilege} that is has a logical name that provides access to actions via an {@link Automaton}.
  */ 
-public final class NamedClusterPrivilege implements FixedClusterPrivilege, AutomatonClusterPrivilege {
+public final class NamedClusterPrivilege implements NameableClusterPrivilege {
 
     private final String name;
     private final Automaton automaton;
@@ -41,8 +40,4 @@ public final class NamedClusterPrivilege implements FixedClusterPrivilege, Autom
         return automaton;
     }
 
-    @Override
-    public ClusterPermission.Builder buildPermission(ClusterPermission.Builder builder) {
-        return builder.add(this);
-    }
 }

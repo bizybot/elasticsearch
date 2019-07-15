@@ -42,7 +42,7 @@ import org.elasticsearch.xpack.core.security.authz.permission.FieldPermissionsCa
 import org.elasticsearch.xpack.core.security.authz.permission.Role;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilegeDescriptor;
-import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.GlobalConfigurableClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore;
 import org.elasticsearch.xpack.core.security.authz.store.RoleRetrievalResult;
@@ -544,12 +544,12 @@ public class CompositeRolesStoreTests extends ESTestCase {
         final TransportRequest request2 = mock(TransportRequest.class);
         final TransportRequest request3 = mock(TransportRequest.class);
 
-        ConfigurableClusterPrivilege ccp1 = mock(ConfigurableClusterPrivilege.class);
+        GlobalConfigurableClusterPrivilege ccp1 = mock(GlobalConfigurableClusterPrivilege.class);
         when(ccp1.buildPermission(Mockito.any())).thenAnswer(inv -> {
             assertThat(inv.getArguments(), Matchers.arrayWithSize(1));
             assertThat(inv.getArguments()[0], Matchers.instanceOf(ClusterPermission.Builder.class));
             ClusterPermission.Builder builder = (ClusterPermission.Builder) inv.getArguments()[0];
-            builder.add(ccp1, action -> action.contains("xpack/security"), req -> req == request1);
+            builder.add(ccp1, action -> action.contains("xpack/security"), (req, authn) -> req == request1);
             return builder;
         });
         RoleDescriptor role1 = new RoleDescriptor("r1", new String[]{"monitor"}, new IndicesPrivileges[]{
@@ -572,15 +572,15 @@ public class CompositeRolesStoreTests extends ESTestCase {
                 .resources("settings/*")
                 .privileges("read")
                 .build()
-        }, new ConfigurableClusterPrivilege[] { ccp1 },
+        }, new GlobalConfigurableClusterPrivilege[] { ccp1 },
         new String[]{"app-user-1"}, null, null);
 
-        ConfigurableClusterPrivilege ccp2 = mock(ConfigurableClusterPrivilege.class);
+        GlobalConfigurableClusterPrivilege ccp2 = mock(GlobalConfigurableClusterPrivilege.class);
         when(ccp2.buildPermission(Mockito.any())).thenAnswer(inv -> {
             assertThat(inv.getArguments(), Matchers.arrayWithSize(1));
             assertThat(inv.getArguments()[0], Matchers.instanceOf(ClusterPermission.Builder.class));
             ClusterPermission.Builder builder = (ClusterPermission.Builder) inv.getArguments()[0];
-            builder.add(ccp2, action -> action.contains("xpack/security"), req -> req == request2);
+            builder.add(ccp2, action -> action.contains("xpack/security"), (req, authn) -> req == request2);
             return builder;
         });
         RoleDescriptor role2 = new RoleDescriptor("r2", new String[]{"manage_saml"}, new IndicesPrivileges[]{
@@ -599,7 +599,7 @@ public class CompositeRolesStoreTests extends ESTestCase {
                 .resources("*")
                 .privileges("read")
                 .build()
-        }, new ConfigurableClusterPrivilege[] { ccp2 },
+        }, new GlobalConfigurableClusterPrivilege[] { ccp2 },
         new String[]{"app-user-2"}, null, null);
 
         FieldPermissionsCache cache = new FieldPermissionsCache(Settings.EMPTY);
@@ -621,12 +621,13 @@ public class CompositeRolesStoreTests extends ESTestCase {
         CompositeRolesStore.buildRoleFromDescriptors(Sets.newHashSet(role1, role2), cache, privilegeStore, future);
         Role role = future.actionGet();
 
-        assertThat(role.cluster().check(ClusterStateAction.NAME, randomFrom(request1, request2, request3)), equalTo(true));
-        assertThat(role.cluster().check(SamlAuthenticateAction.NAME, randomFrom(request1, request2, request3)), equalTo(true));
-        assertThat(role.cluster().check(ClusterUpdateSettingsAction.NAME, randomFrom(request1, request2, request3)), equalTo(false));
+        final Authentication authn = mock(Authentication.class);
+        assertThat(role.cluster().check(ClusterStateAction.NAME, randomFrom(request1, request2, request3), authn), equalTo(true));
+        assertThat(role.cluster().check(SamlAuthenticateAction.NAME, randomFrom(request1, request2, request3), authn), equalTo(true));
+        assertThat(role.cluster().check(ClusterUpdateSettingsAction.NAME, randomFrom(request1, request2, request3), authn), equalTo(false));
 
-        assertThat(role.cluster().check(PutUserAction.NAME, randomFrom(request1, request2)), equalTo(true));
-        assertThat(role.cluster().check(PutUserAction.NAME, request3), equalTo(false));
+        assertThat(role.cluster().check(PutUserAction.NAME, randomFrom(request1, request2), authn), equalTo(true));
+        assertThat(role.cluster().check(PutUserAction.NAME, request3, authn), equalTo(false));
 
         final Predicate<String> allowedRead = role.indices().allowedIndicesMatcher(GetAction.NAME);
         assertThat(allowedRead.test("abc-123"), equalTo(true));
@@ -1071,7 +1072,7 @@ public class CompositeRolesStoreTests extends ESTestCase {
         PlainActionFuture<Role> roleFuture = new PlainActionFuture<>();
         compositeRolesStore.getRoles(authentication.getUser(), authentication, roleFuture);
         Role role = roleFuture.actionGet();
-        assertThat(role.checkClusterAction("cluster:admin/foo", Empty.INSTANCE), is(false));
+        assertThat(role.checkClusterAction("cluster:admin/foo", Empty.INSTANCE, mock(Authentication.class)), is(false));
         assertThat(effectiveRoleDescriptors.get(), is(nullValue()));
         verify(apiKeyService).getRoleForApiKey(eq(authentication), any(ActionListener.class));
     }

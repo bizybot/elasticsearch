@@ -24,8 +24,8 @@ import org.elasticsearch.xpack.core.security.SecurityContext;
 import org.elasticsearch.xpack.core.security.action.user.GetUserPrivilegesRequestBuilder;
 import org.elasticsearch.xpack.core.security.action.user.GetUserPrivilegesResponse;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
-import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege;
-import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivileges;
+import org.elasticsearch.xpack.core.security.authz.privilege.GlobalConfigurableClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.GlobalConfigurableClusterPrivileges;
 import org.elasticsearch.xpack.core.security.user.User;
 import org.elasticsearch.xpack.security.rest.action.SecurityBaseRestHandler;
 
@@ -81,8 +81,8 @@ public class RestGetUserPrivilegesAction extends SecurityBaseRestHandler {
 
             builder.field(RoleDescriptor.Fields.CLUSTER.getPreferredName(), response.getClusterPrivileges());
             builder.startArray(RoleDescriptor.Fields.GLOBAL.getPreferredName());
-            for (ConfigurableClusterPrivilege ccp : response.getConditionalClusterPrivileges()) {
-                ConfigurableClusterPrivileges.toXContent(builder, ToXContent.EMPTY_PARAMS, Collections.singleton(ccp));
+            for (GlobalConfigurableClusterPrivilege ccp : response.getConditionalClusterPrivileges()) {
+                GlobalConfigurableClusterPrivileges.toXContent(builder, ToXContent.EMPTY_PARAMS, Collections.singleton(ccp));
             }
             builder.endArray();
 

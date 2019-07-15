@@ -97,7 +97,9 @@ public final class ClusterPrivilegeResolver {
     public static final NamedClusterPrivilege MANAGE_ILM = new NamedClusterPrivilege("manage_ilm", MANAGE_ILM_AUTOMATON);
     public static final NamedClusterPrivilege READ_ILM = new NamedClusterPrivilege("read_ilm", READ_ILM_AUTOMATON);
 
-    private static final Map<String, FixedClusterPrivilege> VALUES = Stream.<FixedClusterPrivilege>of(
+    public static final NamedConfigurableClusterPrivilege MANAGE_OWN_API_KEY = new ManageOwnApiKeyClusterPrivilege();
+
+    private static final Map<String, NameableClusterPrivilege> VALUES = Stream.<NameableClusterPrivilege>of(
         NONE,
         ALL,
         MONITOR,
@@ -123,14 +125,16 @@ public final class ClusterPrivilegeResolver {
         READ_CCR,
         CREATE_SNAPSHOT,
         MANAGE_ILM,
-        READ_ILM).collect(Collectors.toUnmodifiableMap(FixedClusterPrivilege::name, Function.identity()));
+        READ_ILM,
+        MANAGE_OWN_API_KEY).collect(Collectors.toUnmodifiableMap(NameableClusterPrivilege::name, Function.identity()));
 
-    public static FixedClusterPrivilege resolve(String name) {
+
+    public static NameableClusterPrivilege resolve(String name) {
         name = Objects.requireNonNull(name).toLowerCase(Locale.ROOT);
         if (isClusterAction(name)) {
-            return new ActionClusterPrivilege(name);
+            return new NamedClusterPrivilege(name, name);
         }
-        final FixedClusterPrivilege fixedPrivilege = VALUES.get(name);
+        final NameableClusterPrivilege fixedPrivilege = VALUES.get(name);
         if (fixedPrivilege != null) {
             return fixedPrivilege;
         }

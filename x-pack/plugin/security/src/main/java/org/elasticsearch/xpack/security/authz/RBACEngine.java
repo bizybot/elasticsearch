@@ -57,8 +57,8 @@ import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivileg
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilegeDescriptor;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
-import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege;
-import org.elasticsearch.xpack.core.security.authz.privilege.FixedClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.NameableClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.GlobalConfigurableClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.Privilege;
 import org.elasticsearch.xpack.core.security.support.Automatons;
 import org.elasticsearch.xpack.core.security.user.User;
@@ -137,7 +137,7 @@ public class RBACEngine implements AuthorizationEngine {
                                        ActionListener<AuthorizationResult> listener) {
         if (authorizationInfo instanceof RBACAuthorizationInfo) {
             final Role role = ((RBACAuthorizationInfo) authorizationInfo).getRole();
-            if (role.checkClusterAction(requestInfo.getAction(), requestInfo.getRequest())) {
+            if (role.checkClusterAction(requestInfo.getAction(), requestInfo.getRequest(), requestInfo.getAuthentication())) {
                 listener.onResponse(AuthorizationResult.granted());
             } else if (checkSameUserPermissions(requestInfo.getAction(), requestInfo.getRequest(), requestInfo.getAuthentication())) {
                 listener.onResponse(AuthorizationResult.granted());
@@ -414,14 +414,14 @@ public class RBACEngine implements AuthorizationEngine {
         // We use sorted sets for Strings because they will typically be small, and having a predictable order allows for simpler testing
         final Set<String> cluster = new TreeSet<>();
         // But we don't have a meaningful ordering for objects like ConditionalClusterPrivilege, so the tests work with "random" ordering
-        final Set<ConfigurableClusterPrivilege> configurableCluster = new HashSet<>();
+        final Set<GlobalConfigurableClusterPrivilege> configurableCluster = new HashSet<>();
         for (ClusterPrivilege privilege : userRole.cluster().privileges()) {
-            if (privilege instanceof FixedClusterPrivilege) {
+            if (privilege instanceof NameableClusterPrivilege) {
                 if (ClusterPrivilegeResolver.NONE.equals(privilege) == false) {
-                    cluster.add(((FixedClusterPrivilege) privilege).name());
+                    cluster.add(((NameableClusterPrivilege) privilege).name());
                 }
-            } else if (privilege instanceof ConfigurableClusterPrivilege) {
-                configurableCluster.add((ConfigurableClusterPrivilege) privilege);
+            } else if (privilege instanceof GlobalConfigurableClusterPrivilege) {
+                configurableCluster.add((GlobalConfigurableClusterPrivilege) privilege);
             }
         }
 

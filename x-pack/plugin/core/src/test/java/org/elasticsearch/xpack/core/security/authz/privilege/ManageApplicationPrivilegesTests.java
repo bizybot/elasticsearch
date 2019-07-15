@@ -31,8 +31,10 @@ import org.elasticsearch.xpack.core.security.action.role.PutRoleAction;
 import org.elasticsearch.xpack.core.security.action.rolemapping.DeleteRoleMappingAction;
 import org.elasticsearch.xpack.core.security.action.user.GetUsersAction;
 import org.elasticsearch.xpack.core.security.action.user.HasPrivilegesAction;
+import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authz.permission.ClusterPermission;
-import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivileges.ManageApplicationPrivileges;
+import org.elasticsearch.xpack.core.security.authz.privilege.ManageApplicationPrivileges;
+import org.elasticsearch.xpack.core.security.support.Automatons;
 
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
@@ -50,6 +52,7 @@ import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.Mockito.mock;
 
 public class ManageApplicationPrivilegesTests extends ESTestCase {
 
@@ -101,7 +104,7 @@ public class ManageApplicationPrivilegesTests extends ESTestCase {
 
     public void testActionPattern() {
         // TODO -- FIXME, does this test still make sense?
-        Predicate<String> predicate = ManageApplicationPrivileges.ACTION_PREDICATE;
+        Predicate<String> predicate = Automatons.predicate("cluster:admin/xpack/security/privilege/*");
         for (String actionName : Arrays.asList(GetPrivilegesAction.NAME, PutPrivilegesAction.NAME, DeletePrivilegesAction.NAME)) {
             assertThat(predicate, predicateMatches(actionName));
         }
@@ -123,12 +126,14 @@ public class ManageApplicationPrivilegesTests extends ESTestCase {
 
         final GetPrivilegesRequest getKibana1 = new GetPrivilegesRequest();
         getKibana1.application("kibana-1");
-        assertThat(kibanaAndLogstashPermission.check(GetPrivilegesAction.NAME, getKibana1), equalTo(true));
-        assertThat(cloudAndSwiftypePermission.check(GetPrivilegesAction.NAME, getKibana1), equalTo(false));
+        assertThat(kibanaAndLogstashPermission.check(GetPrivilegesAction.NAME, getKibana1, mock(Authentication.class)), equalTo(true));
+        assertThat(cloudAndSwiftypePermission.check(GetPrivilegesAction.NAME, getKibana1, mock(Authentication.class)), equalTo(false));
 
         final DeletePrivilegesRequest deleteLogstash = new DeletePrivilegesRequest("logstash", new String[]{"all"});
-        assertThat(kibanaAndLogstashPermission.check(DeletePrivilegesAction.NAME, deleteLogstash), equalTo(true));
-        assertThat(cloudAndSwiftypePermission.check(DeletePrivilegesAction.NAME, deleteLogstash), equalTo(false));
+        assertThat(kibanaAndLogstashPermission.check(DeletePrivilegesAction.NAME, deleteLogstash, mock(Authentication.class)),
+            equalTo(true));
+        assertThat(cloudAndSwiftypePermission.check(DeletePrivilegesAction.NAME, deleteLogstash, mock(Authentication.class)),
+            equalTo(false));
 
         final PutPrivilegesRequest putKibana = new PutPrivilegesRequest();
 
@@ -138,8 +143,8 @@ public class ManageApplicationPrivilegesTests extends ESTestCase {
                 randomAlphaOfLengthBetween(3, 6).toLowerCase(Locale.ROOT), Collections.emptySet(), Collections.emptyMap()));
         }
         putKibana.setPrivileges(kibanaPrivileges);
-        assertThat(kibanaAndLogstashPermission.check(PutPrivilegesAction.NAME, putKibana), equalTo(true));
-        assertThat(cloudAndSwiftypePermission.check(PutPrivilegesAction.NAME, putKibana), equalTo(false));
+        assertThat(kibanaAndLogstashPermission.check(PutPrivilegesAction.NAME, putKibana, mock(Authentication.class)), equalTo(true));
+        assertThat(cloudAndSwiftypePermission.check(PutPrivilegesAction.NAME, putKibana, mock(Authentication.class)), equalTo(false));
     }
 
     private ClusterPermission getPermission(ClusterPrivilege privilege) {
@@ -156,8 +161,8 @@ public class ManageApplicationPrivilegesTests extends ESTestCase {
         final ManageApplicationPrivileges kibanaOnly = new ManageApplicationPrivileges(Sets.newHashSet("kibana-*"));
         final ManageApplicationPrivileges allApps = new ManageApplicationPrivileges(Sets.newHashSet("*"));
 
-        assertThat(getPermission(kibanaOnly).check(GetPrivilegesAction.NAME, getAll), equalTo(false));
-        assertThat(getPermission(allApps).check(GetPrivilegesAction.NAME, getAll), equalTo(true));
+        assertThat(getPermission(kibanaOnly).check(GetPrivilegesAction.NAME, getAll, mock(Authentication.class)), equalTo(false));
+        assertThat(getPermission(allApps).check(GetPrivilegesAction.NAME, getAll, mock(Authentication.class)), equalTo(true));
     }
 
     private ManageApplicationPrivileges clone(ManageApplicationPrivileges original) {

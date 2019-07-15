@@ -9,11 +9,11 @@ import org.apache.lucene.util.automaton.Operations;
 import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.transport.TransportRequest;
+import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authz.permission.ClusterPermission;
 import org.elasticsearch.xpack.core.security.support.Automatons;
 import org.junit.Rule;
 import org.junit.rules.ExpectedException;
-import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Set;
@@ -22,6 +22,7 @@ import java.util.function.Predicate;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.mockito.Mockito.mock;
 
 public class PrivilegeTests extends ESTestCase {
     @Rule
@@ -37,7 +38,7 @@ public class PrivilegeTests extends ESTestCase {
 
     public void testCluster() throws Exception {
         // TODO -- FIXME, this test doesn't make a lot of sense anymore.
-        FixedClusterPrivilege cluster = ClusterPrivilegeResolver.resolve("monitor");
+        NameableClusterPrivilege cluster = ClusterPrivilegeResolver.resolve("monitor");
         assertThat(cluster, instanceOf(NamedClusterPrivilege.class));
         assertThat(cluster.name(), is("monitor"));
 
@@ -77,7 +78,7 @@ public class PrivilegeTests extends ESTestCase {
 
     private boolean check(ClusterPrivilege privilege, String action) {
         final ClusterPermission permission = privilege.buildPermission(ClusterPermission.builder()).build();
-        return permission.check(action, Mockito.mock(TransportRequest.class));
+        return permission.check(action, mock(TransportRequest.class), mock(Authentication.class));
     }
 
     public void testIndexAction() throws Exception {
@@ -144,7 +145,7 @@ public class PrivilegeTests extends ESTestCase {
     }
 
     public void testManageCcrPrivilege() {
-        FixedClusterPrivilege privilege =  ClusterPrivilegeResolver.resolve("manage_ccr");
+        NameableClusterPrivilege privilege =  ClusterPrivilegeResolver.resolve("manage_ccr");
         assertThat(check(privilege, "cluster:admin/xpack/ccr/follow_index"), is(true));
         assertThat(check(privilege, "cluster:admin/xpack/ccr/unfollow_index"), is(true));
         assertThat(check(privilege, "cluster:admin/xpack/ccr/brand_new_api"), is(true));
@@ -153,7 +154,7 @@ public class PrivilegeTests extends ESTestCase {
 
     public void testIlmPrivileges() {
         {
-            FixedClusterPrivilege privilege = ClusterPrivilegeResolver.resolve("manage_ilm");
+            NameableClusterPrivilege privilege = ClusterPrivilegeResolver.resolve("manage_ilm");
             // check cluster actions
             assertThat(check(privilege, "cluster:admin/ilm/delete"), is(true));
             assertThat(check(privilege, "cluster:admin/ilm/_move/post"), is(true));

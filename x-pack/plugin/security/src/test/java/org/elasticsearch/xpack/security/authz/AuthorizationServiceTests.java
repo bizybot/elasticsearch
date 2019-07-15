@@ -113,7 +113,7 @@ import org.elasticsearch.xpack.core.security.authz.permission.FieldPermissionsCa
 import org.elasticsearch.xpack.core.security.authz.permission.Role;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilegeDescriptor;
-import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.GlobalConfigurableClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore;
 import org.elasticsearch.xpack.core.security.user.AnonymousUser;
 import org.elasticsearch.xpack.core.security.user.ElasticUser;
@@ -312,15 +312,15 @@ public class AuthorizationServiceTests extends ESTestCase {
         final DeletePrivilegesRequest request = new DeletePrivilegesRequest();
         final Authentication authentication = createAuthentication(new User("user1", "role1"));
 
-        final ConfigurableClusterPrivilege configurableClusterPrivilege = Mockito.mock(ConfigurableClusterPrivilege.class);
+        final GlobalConfigurableClusterPrivilege configurableClusterPrivilege = Mockito.mock(GlobalConfigurableClusterPrivilege.class);
         when(configurableClusterPrivilege.buildPermission(Mockito.any())).thenAnswer(inv -> {
             assertThat(inv.getArguments(), org.hamcrest.Matchers.arrayWithSize(1));
             assertThat(inv.getArguments()[0], org.hamcrest.Matchers.instanceOf(ClusterPermission.Builder.class));
             ClusterPermission.Builder builder = (ClusterPermission.Builder) inv.getArguments()[0];
-            builder.add(configurableClusterPrivilege, action -> action.contains("xpack/security"), req -> req == request);
+            builder.add(configurableClusterPrivilege, action -> action.contains("xpack/security"), (req, authn) -> req == request);
             return builder;
         });
-        final ConfigurableClusterPrivilege[] configurableClusterPrivileges = new ConfigurableClusterPrivilege[] {
+        final GlobalConfigurableClusterPrivilege[] configurableClusterPrivileges = new GlobalConfigurableClusterPrivilege[] {
             configurableClusterPrivilege
         };
         final String requestId = AuditUtil.getOrGenerateRequestId(threadContext);
@@ -337,15 +337,15 @@ public class AuthorizationServiceTests extends ESTestCase {
         final DeletePrivilegesRequest request = new DeletePrivilegesRequest();
         final Authentication authentication = createAuthentication(new User("user1", "role1"));
 
-        final ConfigurableClusterPrivilege configurableClusterPrivilege = Mockito.mock(ConfigurableClusterPrivilege.class);
+        final GlobalConfigurableClusterPrivilege configurableClusterPrivilege = Mockito.mock(GlobalConfigurableClusterPrivilege.class);
         when(configurableClusterPrivilege.buildPermission(Mockito.any())).thenAnswer(inv -> {
             assertThat(inv.getArguments(), org.hamcrest.Matchers.arrayWithSize(1));
             assertThat(inv.getArguments()[0], org.hamcrest.Matchers.instanceOf(ClusterPermission.Builder.class));
             ClusterPermission.Builder builder = (ClusterPermission.Builder) inv.getArguments()[0];
-            builder.add(configurableClusterPrivilege, action -> true, req -> false);
+            builder.add(configurableClusterPrivilege, action -> true, (req, authn) -> false);
             return builder;
         });
-        final ConfigurableClusterPrivilege[] configurableClusterPrivileges = new ConfigurableClusterPrivilege[] {
+        final GlobalConfigurableClusterPrivilege[] configurableClusterPrivileges = new GlobalConfigurableClusterPrivilege[] {
             configurableClusterPrivilege
         };
         final String requestId = AuditUtil.getOrGenerateRequestId(threadContext);

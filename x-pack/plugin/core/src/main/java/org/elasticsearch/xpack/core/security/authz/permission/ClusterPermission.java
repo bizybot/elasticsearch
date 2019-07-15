@@ -8,6 +8,7 @@ package org.elasticsearch.xpack.core.security.authz.permission;
 import org.apache.lucene.util.automaton.Automaton;
 import org.apache.lucene.util.automaton.Operations;
 import org.elasticsearch.transport.TransportRequest;
+import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authz.privilege.AutomatonClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilege;
 import org.elasticsearch.xpack.core.security.support.Automatons;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 
 /**
@@ -26,7 +28,7 @@ public class ClusterPermission {
     public static final ClusterPermission NONE = new ClusterPermission(Set.of(), List.of());
 
     public interface PermissionCheck {
-        boolean check(String action, TransportRequest request);
+        boolean check(String action, TransportRequest request, Authentication authentication);
 
         boolean grants(ClusterPrivilege privilege);
     }
@@ -39,8 +41,8 @@ public class ClusterPermission {
         this.checks = List.copyOf(checks);
     }
 
-    public boolean check(String action, TransportRequest request) {
-        return this.checks.stream().anyMatch(c -> c.check(action, request));
+    public boolean check(String action, TransportRequest request, Authentication authentication) {
+        return this.checks.stream().anyMatch(c -> c.check(action, request, authentication));
     }
 
     public boolean grants(ClusterPrivilege privilege) {
@@ -81,11 +83,12 @@ public class ClusterPermission {
             return this;
         }
 
-        public Builder add(ClusterPrivilege privilege, Predicate<String> actionPredicate, Predicate<TransportRequest> requestPredicate) {
+        public Builder add(ClusterPrivilege privilege, Predicate<String> actionPredicate,
+                           BiPredicate<TransportRequest, Authentication> requestPredicate) {
             return add(privilege, new PermissionCheck() {
                 @Override
-                public boolean check(String action, TransportRequest request) {
-                    return actionPredicate.test(action) && requestPredicate.test(request);
+                public boolean check(String action, TransportRequest request, Authentication authentication) {
+                    return actionPredicate.test(action) && requestPredicate.test(request, authentication);
                 }
 
                 @Override
@@ -121,7 +124,7 @@ public class ClusterPermission {
         }
 
         @Override
-        public boolean check(String action, TransportRequest request) {
+        public boolean check(String action, TransportRequest request, Authentication authentication) {
             return this.predicate.test(action);
         }
 
