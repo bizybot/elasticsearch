@@ -186,7 +186,7 @@ public final class DeprecationRoleDescriptorConsumer implements Consumer<Collect
             final Set<String> aliasPrivilegeNames = privilegesByAlias.getValue();
             final Automaton aliasPrivilegeAutomaton = IndexPrivilege.get(aliasPrivilegeNames).getAutomaton();
             final SortedSet<String> inferiorIndexNames = new TreeSet<>();
-            // check if the alias grants superiors privileges than the indices it points to
+            // check if the alias implies superiors privileges than the indices it points to
             for (IndexMetaData indexMetadata : aliasOrIndexMap.get(aliasName).getIndices()) {
                 final String indexName = indexMetadata.getIndex().getName();
                 final Set<String> indexPrivileges = privilegesByIndexMap.get(indexName);

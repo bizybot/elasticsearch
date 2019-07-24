@@ -515,7 +515,7 @@ public class NativeRealmIntegTests extends NativeRealmIntegTestCase {
         assertThat(joe.roles(), arrayContaining("read_role"));
         assertThat(joe.fullName(), is("Joe Smith"));
 
-        // test that role change took effect if anonymous is disabled as anonymous grants monitoring permissions...
+        // test that role change took effect if anonymous is disabled as anonymous implies monitoring permissions...
         if (anonymousEnabled && roleExists) {
             assertNoTimeout(
                     client().filterWithHeader(Collections.singletonMap("Authorization", token)).admin().cluster().prepareHealth().get());
