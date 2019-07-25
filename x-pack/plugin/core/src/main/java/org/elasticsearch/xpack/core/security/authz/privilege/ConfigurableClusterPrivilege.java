@@ -21,7 +21,7 @@ import java.util.function.Predicate;
  * with a {@link Predicate} for a {@link TransportRequest} (that determines which requests may be executed).
  * The a given execution of an action is considered to be permitted if both the action and the request are permitted.
  */
-public interface ConfigurableClusterPrivilege extends NamedWriteable, ToXContentFragment {
+public interface ConfigurableClusterPrivilege extends NamedWriteable, ToXContentFragment, ClusterPrivilege {
 
     /**
      * The category under which this privilege should be rendered when output as XContent.

@@ -17,6 +17,7 @@ import org.elasticsearch.common.xcontent.XContentParseException;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.core.security.action.privilege.ApplicationPrivilegesRequest;
+import org.elasticsearch.xpack.core.security.authz.permission.ClusterPermission;
 import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege.Category;
 import org.elasticsearch.xpack.core.security.support.Automatons;
 import org.elasticsearch.xpack.core.security.xcontent.XContentUtils;
@@ -125,9 +126,8 @@ public final class ConfigurableClusterPrivileges {
      */
     public static class ManageApplicationPrivileges implements ConfigurableClusterPrivilege {
 
-        private static final ClusterPrivilege PRIVILEGE = ClusterPrivilege.get(
-            Collections.singleton("cluster:admin/xpack/security/privilege/*")
-        );
+        private static final ActionClusterPrivilege PRIVILEGE = new ActionClusterPrivilege("manage_app_privs",
+            Set.of("cluster:admin/xpack/security/privilege/*"));
         public static final String WRITEABLE_NAME = "manage-application-privileges";
 
         private final Set<String> applicationNames;
@@ -222,6 +222,11 @@ public final class ConfigurableClusterPrivileges {
         @Override
         public int hashCode() {
             return applicationNames.hashCode();
+        }
+
+        @Override
+        public ClusterPermission.Builder buildPermission(ClusterPermission.Builder builder) {
+            return builder.add(this, Automatons.predicate(PRIVILEGE.getAllowedActionPatterns()), requestPredicate);
         }
 
         private interface Fields {

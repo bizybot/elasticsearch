@@ -57,7 +57,9 @@ import org.elasticsearch.xpack.core.security.authz.permission.Role;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilegeDescriptor;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
 import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege;
+import org.elasticsearch.xpack.core.security.authz.privilege.NameableClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.Privilege;
 import org.elasticsearch.xpack.core.security.support.Automatons;
 import org.elasticsearch.xpack.core.security.user.User;
@@ -360,7 +362,7 @@ public class RBACEngine implements AuthorizationEngine {
 
         Map<String, Boolean> cluster = new HashMap<>();
         for (String checkAction : request.clusterPrivileges()) {
-            final ClusterPrivilege checkPrivilege = ClusterPrivilege.get(Collections.singleton(checkAction));
+            final ClusterPrivilege checkPrivilege = ClusterPrivilegeResolver.resolve(checkAction);
             cluster.put(checkAction, userRole.grants(checkPrivilege));
         }
         boolean allMatch = cluster.values().stream().allMatch(Boolean::booleanValue);
@@ -414,13 +416,11 @@ public class RBACEngine implements AuthorizationEngine {
         final Set<String> cluster = new TreeSet<>();
         // But we don't have a meaningful ordering for objects like ConfigurableClusterPrivilege, so the tests work with "random" ordering
         final Set<ConfigurableClusterPrivilege> conditionalCluster = new HashSet<>();
-        for (Tuple<ClusterPrivilege, ConfigurableClusterPrivilege> tup : userRole.cluster().privileges()) {
-            if (tup.v2() == null) {
-                if (ClusterPrivilege.NONE.equals(tup.v1()) == false) {
-                    cluster.addAll(tup.v1().name());
-                }
-            } else {
-                conditionalCluster.add(tup.v2());
+        for (ClusterPrivilege cp : userRole.cluster().privileges()) {
+            if (cp instanceof NameableClusterPrivilege) {
+                cluster.add(((NameableClusterPrivilege) cp).name());
+            } else if (cp instanceof ConfigurableClusterPrivilege ) {
+                conditionalCluster.add((ConfigurableClusterPrivilege) cp);
             }
         }
 
