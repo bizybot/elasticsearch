@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 
 /**
@@ -90,11 +91,13 @@ public class ClusterPermission {
             return this;
         }
 
-        public Builder add(final ConfigurableClusterPrivilege configurableClusterPrivilege, final Predicate<String> actionPredicate,
-                           final Predicate<TransportRequest> requestPredicate) {
-            return add(configurableClusterPrivilege, new ActionRequestPredicatePermissionCheck(configurableClusterPrivilege,
-                                                                                               actionPredicate,
-                                                                                               requestPredicate));
+        public Builder add(final ClusterPrivilege clusterPrivilege, final Set<String> allowedActionPatterns,
+                           final Set<String> excludeActionPatterns, final PermissionCheckPredicate<TransportRequest> permissionCheckPredicate) {
+            final Automaton allowedAutomaton = Automatons.patterns(allowedActionPatterns);
+            final Automaton excludedAutomaton = Automatons.patterns(excludeActionPatterns);
+            final Automaton actionAutomaton = Automatons.minusAndMinimize(allowedAutomaton, excludedAutomaton);
+
+            return add(clusterPrivilege, new ActionRequestPredicatePermissionCheck(actionAutomaton, permissionCheckPredicate));
         }
 
         public Builder add(final ClusterPrivilege clusterPrivilege, final PermissionCheck permissionCheck) {
@@ -144,6 +147,32 @@ public class ClusterPermission {
         boolean implies(PermissionCheck permissionCheck);
     }
 
+    /**
+     * Represents a {@link Predicate} wrapper for cluster permission check with a way to check if it is a subset of other predicate.
+     */
+    public interface PermissionCheckPredicate<T> {
+        /**
+         * Checks if this predicate is subset of the specified {@link PermissionCheckPredicate}.
+         * @param otherPermissionCheckPredicate predicate
+         * @return {@code true} if it is a subset else returns {@code false}
+         */
+        boolean isSubsetOf(PermissionCheckPredicate<T> otherPermissionCheckPredicate);
+        Predicate<T> predicate();
+    }
+
+    /**
+     * Represents a {@link BiPredicate} wrapper for cluster permission check with a way to check if it is a subset of other predicate.
+     */
+    public interface PermissionCheckBiPredicate<T, U> {
+        /**
+         * Checks if this predicate is subset of the specified {@link PermissionCheckBiPredicate}.
+         * @param otherPermissionCheckBiPredicate predicate
+         * @return {@code true} if it is a subset else returns {@code false}
+         */
+        boolean isSubsetOf(PermissionCheckBiPredicate<T, U> otherPermissionCheckBiPredicate);
+        BiPredicate<T, U> predicate();
+    }
+
     // Automaton based permission check
     private static class AutomatonPermissionCheck implements PermissionCheck {
         private final Automaton automaton;
@@ -170,27 +199,28 @@ public class ClusterPermission {
 
     // action and request based permission check
     private static class ActionRequestPredicatePermissionCheck implements PermissionCheck {
-        private final ClusterPrivilege clusterPrivilege;
+        final Automaton actionAutomaton;
         final Predicate<String> actionPredicate;
-        final Predicate<TransportRequest> requestPredicate;
+        final PermissionCheckPredicate<TransportRequest> requestPredicate;
 
-        ActionRequestPredicatePermissionCheck(final ClusterPrivilege clusterPrivilege, final Predicate<String> actionPredicate,
-                                              final Predicate<TransportRequest> requestPredicate) {
-            this.clusterPrivilege = clusterPrivilege;
-            this.actionPredicate = actionPredicate;
+        ActionRequestPredicatePermissionCheck(final Automaton actionAutomaton,
+                                              final PermissionCheckPredicate<TransportRequest> requestPredicate) {
+            this.actionAutomaton = actionAutomaton;
+            this.actionPredicate = Automatons.predicate(actionAutomaton);
             this.requestPredicate = requestPredicate;
         }
 
         @Override
         public boolean check(final String action, final TransportRequest request) {
-            return actionPredicate.test(action) && requestPredicate.test(request);
+            return actionPredicate.test(action) && requestPredicate.predicate().test(request);
         }
 
         @Override
         public boolean implies(final PermissionCheck permissionCheck) {
             if (permissionCheck instanceof ActionRequestPredicatePermissionCheck) {
                 final ActionRequestPredicatePermissionCheck otherCheck = (ActionRequestPredicatePermissionCheck) permissionCheck;
-                return this.clusterPrivilege.equals(otherCheck.clusterPrivilege);
+                return Operations.subsetOf(otherCheck.actionAutomaton, this.actionAutomaton) &&
+                    otherCheck.requestPredicate.isSubsetOf(this.requestPredicate);
             }
             return false;
         }
