@@ -18,6 +18,7 @@ import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeRes
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 /**
  * Transport action to retrieve one or more application privileges from the security index
@@ -33,7 +34,14 @@ public class TransportGetBuiltinPrivilegesAction extends HandledTransportAction<
     protected void doExecute(Task task, GetBuiltinPrivilegesRequest request, ActionListener<GetBuiltinPrivilegesResponse> listener) {
         final TreeSet<String> cluster = new TreeSet<>(ClusterPrivilegeResolver.names());
         final TreeSet<String> index = new TreeSet<>(IndexPrivilege.names());
-        listener.onResponse(new GetBuiltinPrivilegesResponse(cluster, index));
+        GetBuiltinPrivilegesResponse.Deprecations deprecations = new GetBuiltinPrivilegesResponse.Deprecations();
+        for (IndexPrivilege ip : IndexPrivilege.allPrivileges()) {
+            if (ip.isDeprecated()) {
+                deprecations.addDeprecatedIndexPrivilege(ip.name().stream().collect(Collectors.joining(",")), ip.getAlternative(),
+                    ip.isExactReplacement());
+            }
+        }
+        listener.onResponse(new GetBuiltinPrivilegesResponse(cluster, index, deprecations));
     }
 
 }

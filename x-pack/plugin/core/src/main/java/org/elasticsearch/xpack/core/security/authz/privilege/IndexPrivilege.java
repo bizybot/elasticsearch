@@ -27,6 +27,7 @@ import org.elasticsearch.xpack.core.ilm.action.ExplainLifecycleAction;
 import org.elasticsearch.xpack.core.security.support.Automatons;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Locale;
@@ -71,7 +72,8 @@ public final class IndexPrivilege extends Privilege {
     public static final IndexPrivilege ALL =                 new IndexPrivilege("all",                 ALL_AUTOMATON);
     public static final IndexPrivilege READ =                new IndexPrivilege("read",                READ_AUTOMATON);
     public static final IndexPrivilege READ_CROSS_CLUSTER =  new IndexPrivilege("read_cross_cluster",  READ_CROSS_CLUSTER_AUTOMATON);
-    public static final IndexPrivilege CREATE =              new IndexPrivilege("create",              CREATE_AUTOMATON);
+    public static final IndexPrivilege CREATE =              new IndexPrivilege("create",              CREATE_AUTOMATON, true, false,
+        "create_doc");
     public static final IndexPrivilege INDEX =               new IndexPrivilege("index",               INDEX_AUTOMATON);
     public static final IndexPrivilege DELETE =              new IndexPrivilege("delete",              DELETE_AUTOMATON);
     public static final IndexPrivilege WRITE =               new IndexPrivilege("write",               WRITE_AUTOMATON);
@@ -109,12 +111,39 @@ public final class IndexPrivilege extends Privilege {
 
     private static final ConcurrentHashMap<Set<String>, IndexPrivilege> CACHE = new ConcurrentHashMap<>();
 
+    private boolean isDeprecated;
+    private boolean isExactReplacement;
+    private String alternative;
+
     private IndexPrivilege(String name, Automaton automaton) {
-        super(Collections.singleton(name), automaton);
+        this(Collections.singleton(name), automaton);
+    }
+
+    private IndexPrivilege(String name, Automaton automaton, boolean deprecated, boolean hasExactReplacement, String alternative) {
+        this(Collections.singleton(name), automaton, deprecated, hasExactReplacement, alternative);
     }
 
     private IndexPrivilege(Set<String> name, Automaton automaton) {
+        this(name, automaton, false, false, null);
+    }
+
+    private IndexPrivilege(Set<String> name, Automaton automaton, boolean isDeprecated, boolean isExactReplacement, String alternative) {
         super(name, automaton);
+        this.isDeprecated = isDeprecated;
+        this.isExactReplacement = isExactReplacement;
+        this.alternative = alternative;
+    }
+
+    public String getAlternative() {
+        return alternative;
+    }
+
+    public boolean isExactReplacement() {
+        return isExactReplacement;
+    }
+
+    public boolean isDeprecated() {
+        return isDeprecated;
     }
 
     public static IndexPrivilege get(Set<String> name) {
@@ -170,4 +199,7 @@ public final class IndexPrivilege extends Privilege {
         return Collections.unmodifiableSet(VALUES.keySet());
     }
 
+    public static Collection<IndexPrivilege> allPrivileges() {
+        return Collections.unmodifiableCollection(VALUES.values());
+    }
 }

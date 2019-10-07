@@ -11,8 +11,10 @@ import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.xpack.core.security.authc.support.Hasher;
 import org.elasticsearch.xpack.core.security.authc.support.UsernamePasswordToken;
+import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.junit.Before;
 
+import java.util.Collections;
 import java.util.Locale;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertNoTimeout;
@@ -397,6 +399,13 @@ public class IndexPrivilegeTests extends AbstractPrivilegeTestCase {
         } catch(ResponseException e) {
             assertThat(e.getResponse().getStatusLine().getStatusCode(), is(401));
         }
+    }
+
+    public void testDeprecation() {
+        IndexPrivilege indexPrivilege = IndexPrivilege.get(Collections.singleton("create"));
+        assertThat(indexPrivilege.isDeprecated(), is(true));
+        assertThat(indexPrivilege.isExactReplacement(), is(false));
+        assertThat(indexPrivilege.getAlternative(), is("create_doc"));
     }
 
     private void assertUserExecutes(String user, String action, String index, boolean userIsAllowed) throws Exception {

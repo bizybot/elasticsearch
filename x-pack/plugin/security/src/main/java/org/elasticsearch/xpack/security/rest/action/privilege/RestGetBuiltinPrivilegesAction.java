@@ -46,10 +46,7 @@ public class RestGetBuiltinPrivilegesAction extends SecurityBaseRestHandler {
             new RestBuilderListener<>(channel) {
                 @Override
                 public RestResponse buildResponse(GetBuiltinPrivilegesResponse response, XContentBuilder builder) throws Exception {
-                    builder.startObject();
-                    builder.array("cluster", response.getClusterPrivileges());
-                    builder.array("index", response.getIndexPrivileges());
-                    builder.endObject();
+                    response.toXContent(builder, channel.request());
                     return new BytesRestResponse(RestStatus.OK, builder);
                 }
             });

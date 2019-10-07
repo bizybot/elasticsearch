@@ -5,6 +5,8 @@
  */
 package org.elasticsearch.xpack.core.security.authz;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.ParseField;
@@ -15,6 +17,7 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.common.logging.DeprecationLogger;
 import org.elasticsearch.common.xcontent.LoggingDeprecationHandler;
 import org.elasticsearch.common.xcontent.NamedXContentRegistry;
 import org.elasticsearch.common.xcontent.ObjectParser;
@@ -25,6 +28,7 @@ import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.common.xcontent.json.JsonXContent;
 import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ConfigurableClusterPrivileges;
+import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.elasticsearch.xpack.core.security.support.Validation;
 import org.elasticsearch.xpack.core.security.xcontent.XContentUtils;
 
@@ -37,14 +41,22 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * A holder for a Role that contains user-readable information about the Role
  * without containing the actual Role object.
  */
 public class RoleDescriptor implements ToXContentObject, Writeable {
-
     public static final String ROLE_TYPE = "role";
+
+    private static final Logger logger = LogManager.getLogger(RoleDescriptor.class);
+    private static final DeprecationLogger deprecationLogger = new DeprecationLogger(logger);
+    private static final String DEPRECATION_MSG = "[{}] privilege used in role [{}] has been deprecated and will be removed in future " +
+        "versions, use [{}] privilege instead.";
+    private static final String DEPRECATION_MSG_POSSIBLE_ALTERNATIVE = "[{}] privilege used in role [{}] has been deprecated and will be " +
+        "removed in future versions, this privilege does not have an exact replacement, an alternative could be [{}] privilege.";
 
     private final String name;
     private final String[] clusterPrivileges;
@@ -107,6 +119,7 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
         this.metadata = metadata != null ? Collections.unmodifiableMap(metadata) : Collections.emptyMap();
         this.transientMetadata = transientMetadata != null ? Collections.unmodifiableMap(transientMetadata) :
                 Collections.singletonMap("enabled", true);
+        logDeprecations();
     }
 
     public RoleDescriptor(StreamInput in) throws IOException {
@@ -123,6 +136,7 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
 
         this.applicationPrivileges = in.readArray(ApplicationResourcePrivileges::new, ApplicationResourcePrivileges[]::new);
         this.configurableClusterPrivileges = ConfigurableClusterPrivileges.readArray(in);
+        logDeprecations();
     }
 
     public String getName() {
@@ -260,6 +274,23 @@ public class RoleDescriptor implements ToXContentObject, Writeable {
         out.writeMap(transientMetadata);
         out.writeArray(ApplicationResourcePrivileges::write, applicationPrivileges);
         ConfigurableClusterPrivileges.writeArray(out, getConditionalClusterPrivileges());
+    }
+
+    public void logDeprecations() {
+        for (IndicesPrivileges indicesPrivileges : this.getIndicesPrivileges()) {
+            for (String name : indicesPrivileges.getPrivileges()) {
+                IndexPrivilege indexPrivilege = IndexPrivilege.get(Set.of(name));
+                if (indexPrivilege.isDeprecated()) {
+                    String privilegeName = indexPrivilege.name().stream().collect(Collectors.joining(","));
+                    if (indexPrivilege.isExactReplacement()) {
+                        deprecationLogger.deprecated(DEPRECATION_MSG, privilegeName, this.getName(), indexPrivilege.getAlternative());
+                    } else {
+                        deprecationLogger.deprecated(DEPRECATION_MSG_POSSIBLE_ALTERNATIVE, privilegeName, this.getName(),
+                            indexPrivilege.getAlternative());
+                    }
+                }
+            }
+        }
     }
 
     public static RoleDescriptor parse(String name, BytesReference source, boolean allow2xFormat, XContentType xContentType)
